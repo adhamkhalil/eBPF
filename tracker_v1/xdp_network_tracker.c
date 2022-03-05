@@ -53,10 +53,8 @@ int  dns_extract_query(struct xdp_md *ctx){
 			bpf_map_update_elem(&query, &saddr, &q, BPF_ANY);
 			//call tail function
 			bpf_tail_call(ctx, &jmp_table, XDP_LEGAL_DOMAIN);
-			return XDP_PASS;
-		}else{
-			return XDP_DROP;
 		}
+		return XDP_DROP;
 	}
 	return XDP_PASS;
 }
@@ -80,20 +78,16 @@ int  dns_legal_domain(struct xdp_md *ctx){
 	if(parse_host_domain(q, curr_domain))
 		return XDP_DROP;
 	//check if it's an allowed domain
-	struct counters bad_update;
-	bad_update.dropped_packets_name = pkts_counters->dropped_packets_name;
-	bad_update.dropped_packets_length = pkts_counters->dropped_packets_length;
-	bad_update.passed_packets = pkts_counters->passed_packets;
 	uint32_t *is_allowed = NULL;
 	if(!(is_allowed=bpf_map_lookup_elem(&allowed_domains, curr_domain))){
-		bad_update.dropped_packets_name = pkts_counters->dropped_packets_name + 1;
+		pkts_counters->dropped_packets_name = pkts_counters->dropped_packets_name + 1;
 		to_drop = 1;
 	}else if(q->qlength>=MAX_ALLOWED_QUERY_LENGTH){
-		bad_update.dropped_packets_length = pkts_counters->dropped_packets_length + 1;
+		pkts_counters->dropped_packets_length = pkts_counters->dropped_packets_length + 1;
 		to_drop = 1;
 	}
 	if(to_drop == 1){
-		bpf_map_update_elem(&packets_counters, &key, &bad_update, BPF_ANY);
+		bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
 		uint64_t first_query_time = bpf_ktime_get_ns();
 		bpf_map_update_elem(&hosts_rate, &saddr, &first_query_time, BPF_ANY);
 	}
@@ -122,11 +116,10 @@ int  check_host_rate(struct xdp_md *ctx){
 		}
 	}
 	//Reaching here means packet should be PASSED;
-	struct counters good_update;
-	good_update.dropped_packets_length = pkts_counters->dropped_packets_length;
-	good_update.dropped_packets_name = pkts_counters->dropped_packets_name;
-	good_update.passed_packets = pkts_counters->passed_packets + 1;
-	bpf_map_update_elem(&packets_counters, &key, &good_update, BPF_ANY);
+	pkts_counters->dropped_packets_length = pkts_counters->dropped_packets_length;
+	pkts_counters->dropped_packets_name = pkts_counters->dropped_packets_name;
+	pkts_counters->passed_packets = pkts_counters->passed_packets + 1;
+	bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
 
 	return XDP_PASS;
 }

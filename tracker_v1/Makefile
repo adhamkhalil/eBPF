@@ -30,13 +30,13 @@ sys_fs_bpf_mounted:
 	@touch sys_fs_bpf_mounted
 
 allowed_domains: sys_fs_bpf_mounted
-	bpftool map create /sys/fs/bpf/allowed_domains type percpu_hash \
+	bpftool map create /sys/fs/bpf/allowed_domains type hash \
 		name allowed_domains key 4 value 4 entries 2 flags 1
 query: sys_fs_bpf_mounted
-	bpftool map create /sys/fs/bpf/query type percpu_hash \
+	bpftool map create /sys/fs/bpf/query type hash \
 		name query key 4 value 56 entries 100 flags 1
 hosts_rate: sys_fs_bpf_mounted
-	bpftool map create /sys/fs/bpf/hosts_rate type percpu_hash \
+	bpftool map create /sys/fs/bpf/hosts_rate type hash \
 		name hosts_rate key 4 value 8 entries 1000
 
 dump: $(XDP_PROG)

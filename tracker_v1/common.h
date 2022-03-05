@@ -61,7 +61,7 @@ struct bpf_map_def SEC("maps") jmp_table = {
 };
 
 struct bpf_map_def SEC("maps") allowed_domains = {
-	.type = BPF_MAP_TYPE_PERCPU_HASH,
+	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(uint32_t), 
 	.value_size = sizeof(uint32_t), 
 	.max_entries = 2,//TODO #define
@@ -69,7 +69,7 @@ struct bpf_map_def SEC("maps") allowed_domains = {
 };
 
 struct bpf_map_def SEC("maps") query = {
-	.type = BPF_MAP_TYPE_PERCPU_HASH,
+	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(uint32_t), //IP address
 	.value_size = sizeof(struct dns_query), 
 	.max_entries = 100,//TODO #define
@@ -77,14 +77,14 @@ struct bpf_map_def SEC("maps") query = {
 };
 
 struct bpf_map_def SEC("maps") packets_counters = {
-	.type = BPF_MAP_TYPE_PERCPU_HASH,
+	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(uint32_t),
 	.value_size = sizeof(struct counters),
 	.max_entries = 1
 };
 
 struct bpf_map_def SEC("maps") hosts_rate = {
-	.type = BPF_MAP_TYPE_PERCPU_HASH,
+	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(uint32_t), //IP addr
 	.value_size = sizeof(uint64_t), //time in ns
 	.max_entries = 1000	
