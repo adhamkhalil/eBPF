@@ -50,45 +50,46 @@ struct dns_hdr{
 struct counters{
 	uint64_t dropped_packets_name;//dropped by name filter
 	uint64_t dropped_packets_length;//dropped by length filter
+	uint64_t already_blocked;
 	uint64_t passed_packets;	//passed
 };
 
-struct bpf_map_def SEC("maps") jmp_table = {
-	.type = BPF_MAP_TYPE_PROG_ARRAY,
-	.key_size = sizeof(uint32_t),
-	.value_size = sizeof(uint32_t),
-	.max_entries = 3
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+	__uint(key_size, sizeof(uint32_t));
+	__uint(value_size, sizeof(uint32_t));
+	__uint(max_entries, 2);
+}jmp_table SEC(".maps");
 
-struct bpf_map_def SEC("maps") allowed_domains = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(uint32_t), 
-	.value_size = sizeof(uint32_t), 
-	.max_entries = 2,//TODO #define
-	.map_flags = 1
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(uint32_t));
+	__uint(value_size, sizeof(uint32_t));
+	__uint(max_entries, 2);//TODO #define
+	__uint(map_flags, 1);
+}allowed_domains SEC(".maps");
 
-struct bpf_map_def SEC("maps") query = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(uint32_t), //IP address
-	.value_size = sizeof(struct dns_query), 
-	.max_entries = 100,//TODO #define
-	.map_flags = 1
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(uint32_t)); //IP address
+	__uint(value_size, sizeof(struct dns_query)); 
+	__uint(max_entries, 100);//TODO #define
+	__uint(map_flags, 1);
+}query SEC(".maps");
 
-struct bpf_map_def SEC("maps") packets_counters = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(uint32_t),
-	.value_size = sizeof(struct counters),
-	.max_entries = 1
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(uint32_t));
+	__uint(value_size, sizeof(struct counters));
+	__uint(max_entries, 1);
+}packets_counters SEC(".maps");
 
-struct bpf_map_def SEC("maps") hosts_rate = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(uint32_t), //IP addr
-	.value_size = sizeof(uint64_t), //time in ns
-	.max_entries = 1000	
-};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(uint32_t)); //IP addr
+	__uint(value_size, sizeof(uint64_t)); //time in ns
+	__uint(max_entries, 1000);	
+}hosts_rate SEC(".maps");
 
 #endif
 

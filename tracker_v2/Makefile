@@ -3,7 +3,7 @@
 XDP_PROG=xdp_network_tracker.o
 
 CLANG=clang
-DEV=ens33
+DEV=enp0s3
 
 CFLAGS=-g -O3 -I../libbpf/src -Wall -Werror
 LDFLAGS=-L../libbpf/src

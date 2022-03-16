@@ -58,6 +58,7 @@ struct dns_hdr{
 struct counters{
 	uint64_t dropped_packets_name;//dropped by name filter
 	uint64_t dropped_packets_length;//dropped by length filter
+	uint64_t already_blocked;
 	uint64_t passed_packets;	//passed
 };
 
@@ -65,7 +66,7 @@ struct {
 	__uint(type, BPF_MAP_TYPE_PROG_ARRAY);
 	__uint(key_size, sizeof(uint32_t));
 	__uint(value_size, sizeof(uint32_t));
-	__uint(max_entries, 4);
+	__uint(max_entries, 3);
 }jmp_table SEC(".maps");
 
 struct {
@@ -76,7 +77,6 @@ struct {
 	__uint(map_flags, 1);
 }allowed_domains SEC(".maps");
 
-//probably to be removed and replaced with a static variable
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(key_size, sizeof(uint32_t)); //IP address

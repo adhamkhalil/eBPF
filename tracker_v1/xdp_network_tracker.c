@@ -1,10 +1,13 @@
-/* SPDX-License-Identifier: GPL-2.0 */
-//char LICENSE[] SEC("license") = "GPL";
 
 #include "common.h"
 
 #define XDP_LEGAL_DOMAIN 1
-#define XDP_HOST_RATE 2
+#define bpf_printk2(fmt, ...)				\
+({                                                      \
+        char ____fmt[] = fmt;                           \
+        bpf_trace_printk(____fmt, sizeof(____fmt),      \
+                         ##__VA_ARGS__);                \
+})
 
 //returns query (in dns_query) and query length
 static int parse_query(struct xdp_md *ctx, void *query_start, struct dns_query *q);
@@ -33,6 +36,7 @@ int  dns_extract_query(struct xdp_md *ctx){
 		return XDP_PASS;
 
 	udp = (void *)ip + sizeof(*ip);
+
 	if((void *)udp + sizeof(*udp) > data_end){
 		return XDP_DROP;
 	}
@@ -51,6 +55,7 @@ int  dns_extract_query(struct xdp_md *ctx){
 		//check if query has allowed domain name
 		if(q_length != -1){
 			bpf_map_update_elem(&query, &saddr, &q, BPF_ANY);
+			bpf_printk2("domain: %s", q.qname);
 			//call tail function
 			bpf_tail_call(ctx, &jmp_table, XDP_LEGAL_DOMAIN);
 		}
@@ -69,6 +74,17 @@ int  dns_legal_domain(struct xdp_md *ctx){
 	struct counters *pkts_counters = bpf_map_lookup_elem(&packets_counters,&key);
 	if(!pkts_counters) return XDP_DROP;
 	struct dns_query *q = NULL;
+	uint64_t *exists_time = NULL, curr_time=0;
+	if((exists_time = bpf_map_lookup_elem(&hosts_rate, &saddr))){
+		curr_time = bpf_ktime_get_ns();
+		if(curr_time - *exists_time < BLOCK_TIME){
+			pkts_counters->already_blocked = pkts_counters->already_blocked+1;
+			bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
+			return XDP_DROP;	
+		}else{
+			bpf_map_delete_elem(&hosts_rate, &saddr);
+		}
+	}
 	//get host query
        	if(!(q = bpf_map_lookup_elem(&query, &saddr)))
 		return XDP_DROP;
@@ -90,34 +106,9 @@ int  dns_legal_domain(struct xdp_md *ctx){
 		bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
 		uint64_t first_query_time = bpf_ktime_get_ns();
 		bpf_map_update_elem(&hosts_rate, &saddr, &first_query_time, BPF_ANY);
-	}
-	bpf_tail_call(ctx, &jmp_table, XDP_HOST_RATE);
-	return XDP_DROP;
-}
-
-SEC("xdp-check-host-rate")
-int  check_host_rate(struct xdp_md *ctx){
-	uint32_t saddr = -1, key = 0;
-	struct counters *pkts_counters = bpf_map_lookup_elem(&packets_counters,&key);
-	if(!pkts_counters) return XDP_DROP;
-	if((saddr = get_ip_addr(ctx)) == -1)
 		return XDP_DROP;
-	struct dns_query *q = bpf_map_lookup_elem(&query, &saddr);
-	if(!q) return XDP_DROP;
-
-	uint64_t *exists_time = NULL, curr_time=0;
-	if((exists_time = bpf_map_lookup_elem(&hosts_rate, &saddr))){
-		curr_time = bpf_ktime_get_ns();
-		if(curr_time - *exists_time < BLOCK_TIME){
-			return XDP_DROP;	
-		}else{
-			bpf_map_delete_elem(&hosts_rate, &saddr);
-			return XDP_PASS;
-		}
 	}
-	//Reaching here means packet should be PASSED;
-	pkts_counters->dropped_packets_length = pkts_counters->dropped_packets_length;
-	pkts_counters->dropped_packets_name = pkts_counters->dropped_packets_name;
+	//bpf_tail_call(ctx, &jmp_table, XDP_HOST_RATE);
 	pkts_counters->passed_packets = pkts_counters->passed_packets + 1;
 	bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
 
@@ -186,3 +177,5 @@ static uint32_t get_ip_addr(struct xdp_md *ctx){
 
 }
 
+/* SPDX-License-Identifier: GPL-2.0 */
+char LICENSE[] SEC("license") = "GPL";

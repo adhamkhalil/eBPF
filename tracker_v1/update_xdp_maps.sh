@@ -34,6 +34,6 @@ bpftool map update pinned /sys/fs/bpf/allowed_domains \
 
 bpftool map update pinned /sys/fs/bpf/packets_counters \
 	key 00 00 00 00 \
-	value 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+	value 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
 

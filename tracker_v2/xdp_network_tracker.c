@@ -2,8 +2,7 @@
 #include "common.h"
 
 #define XDP_LEGAL_DOMAIN 1
-#define XDP_HOST_RATE 2
-#define XDP_LOAD_BALANCER 3
+#define XDP_LOAD_BALANCER 2
 #define bpf_printk2(fmt, ...)                            \
 ({                                                      \
         char ____fmt[] = fmt;                           \
@@ -22,11 +21,11 @@ static unsigned short checksum(unsigned short *ip, int iphdr_size);
 static uint32_t forwarding_server = 0;
 static uint32_t fwd_port = INITIAL_FWD_PORT;
 static struct forwarding_server fwd_servers[NUM_OF_SERVERS] = {
-	{.ip_addr = 134743044,
-	 .mac = {0x00, 0x50, 0x56, 0xfb, 0x58, 0x8a}
+	{.ip_addr = 2219064450,
+	 .mac = {0x90, 0x2b, 0x34, 0x8c, 0x4a, 0xec}
 	},
-	{.ip_addr = 134744072,
-	 .mac = {0x00, 0x50, 0x56, 0xfb, 0x58, 0x8a}
+	{.ip_addr = 2219064450,
+	 .mac = {0x90, 0x2b, 0x34, 0x8c, 0x4a, 0xec}
 	},
 }; 
 
@@ -88,6 +87,17 @@ int  dns_legal_domain(struct xdp_md *ctx){
 	struct counters *pkts_counters = bpf_map_lookup_elem(&packets_counters,&key);
 	if(!pkts_counters) return XDP_DROP;
 	struct dns_query *q = NULL;
+	uint64_t *exists_time = NULL, curr_time=0;
+	if((exists_time = bpf_map_lookup_elem(&hosts_rate, &saddr))){
+		curr_time = bpf_ktime_get_ns();
+		if(curr_time - *exists_time < BLOCK_TIME){
+			pkts_counters->already_blocked = pkts_counters->already_blocked+1;
+			bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
+			return XDP_DROP;	
+		}else{
+			bpf_map_delete_elem(&hosts_rate, &saddr);
+		}
+	}
 	//get host query
        	if(!(q = bpf_map_lookup_elem(&query, &saddr)))
 		return XDP_DROP;
@@ -110,34 +120,8 @@ int  dns_legal_domain(struct xdp_md *ctx){
 		bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
 		uint64_t first_query_time = bpf_ktime_get_ns();
 		bpf_map_update_elem(&hosts_rate, &saddr, &first_query_time, BPF_ANY);
-	}
-	bpf_tail_call(ctx, &jmp_table, XDP_HOST_RATE);
-	return XDP_DROP;
-}
-
-SEC("xdp-check-host-rate")
-int  check_host_rate(struct xdp_md *ctx){
-	uint32_t saddr = -1, key = 0;
-	struct counters *pkts_counters = bpf_map_lookup_elem(&packets_counters,&key);
-	if(!pkts_counters) return XDP_DROP;
-	if((saddr = get_ip_addr(ctx)) == -1)
 		return XDP_DROP;
-	struct dns_query *q = bpf_map_lookup_elem(&query, &saddr);
-	if(!q) return XDP_DROP;
-
-	uint64_t *exists_time = NULL, curr_time=0;
-	if((exists_time = bpf_map_lookup_elem(&hosts_rate, &saddr))){
-		curr_time = bpf_ktime_get_ns();
-		if(curr_time - *exists_time < BLOCK_TIME){
-			return XDP_DROP;	
-		}else{
-			bpf_map_delete_elem(&hosts_rate, &saddr);
-			//return XDP_PASS;
-		}
 	}
-	//Reaching here means packet should be PASSED;
-	pkts_counters->dropped_packets_length = pkts_counters->dropped_packets_length;
-	pkts_counters->dropped_packets_name = pkts_counters->dropped_packets_name;
 	pkts_counters->passed_packets = pkts_counters->passed_packets + 1;
 	bpf_map_update_elem(&packets_counters, &key, pkts_counters, BPF_ANY);
 	bpf_tail_call(ctx, &jmp_table, XDP_LOAD_BALANCER);
@@ -174,7 +158,6 @@ int load_balancer(struct xdp_md *ctx){
 	if(forwarding_server >= NUM_OF_SERVERS) return XDP_DROP;
 
 	if(forwarding_server == NUM_OF_SERVERS - 1){
-		//We'll forward to 8.8.8.8 - 134744072 MAC: 00:50:56:fb:58:8a
 		//Change MAC
 		char *mac = fwd_servers[forwarding_server].mac;
 		eth->h_dest[0] = mac[0];
@@ -195,7 +178,6 @@ int load_balancer(struct xdp_md *ctx){
 		forwarding_server = 0;
 		fwd_port = INITIAL_FWD_PORT;
 	}else{
-		//We'll forward to 8.8.4.4 - 134743044 MAC: 00:50:56:fb:58:8a
 		char *mac = fwd_servers[forwarding_server].mac;
 		eth->h_dest[0] = mac[0];
 		eth->h_dest[1] = mac[1];
@@ -214,6 +196,7 @@ int load_balancer(struct xdp_md *ctx){
 		++forwarding_server;
 		++fwd_port;
 	}
+	bpf_printk("leaving load_balancer\n");
 	return XDP_TX;
 }
 
