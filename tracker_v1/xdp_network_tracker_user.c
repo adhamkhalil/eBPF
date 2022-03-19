@@ -5,7 +5,7 @@
 #include "bpf.h"
 #include "libbpf.h"
 
-#define DEFAULT_IFACE "enp0s3"
+#define DEFAULT_IFACE "ens33"
 
 #define QUERY_MAP_PIN_PATH "/sys/fs/bpf/query"
 #define ALLOWED_DOMAINS_MAP_PIN_PATH "/sys/fs/bpf/allowed_domains"
