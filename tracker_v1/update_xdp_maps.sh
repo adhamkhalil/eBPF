@@ -23,14 +23,14 @@ bpftool map update pinned /sys/fs/bpf/allowed_domains \
 	value 00 00 00 00
 
 # net
-#bpftool map update pinned /sys/fs/bpf/allowed_domains \
-#	key 0x6e 0x65 0x74 0x00 \
-#	value 00 00 00 00
+bpftool map update pinned /sys/fs/bpf/allowed_domains \
+	key 0x6e 0x65 0x74 0x00 \
+	value 00 00 00 00
 
 # org
-bpftool map update pinned /sys/fs/bpf/allowed_domains \
-	key 0x6f 0x72 0x67 0x00 \
-	value 00 00 00 00
+#bpftool map update pinned /sys/fs/bpf/allowed_domains \
+#	key 0x6f 0x72 0x67 0x00 \
+#	value 00 00 00 00
 
 bpftool map update pinned /sys/fs/bpf/packets_counters \
 	key 00 00 00 00 \
