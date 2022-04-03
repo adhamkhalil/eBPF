@@ -2,7 +2,7 @@
 #include "common.h"
 
 /* Defines */
-#define XDP_LEGAL_DOMAIN 1
+#define XDP_PROG_VALIDATION 1
 #define DNS_PORT 53
 #define DNS_QUERY_REQUEST 0
 #define PACKETS_COUNTERS_MAP_KEY 0
@@ -37,14 +37,14 @@
  * 		SUCCESS in case of success
  * 		dns_query *q - contains query 
  * */
-static int parse_query(struct xdp_md *ctx, void *query_start, struct dns_query *q);
+static int parse_query(struct xdp_md *ctx, void *query_start, struct _dns_query *q);
 /*
  * parse_host_domain function: our filter function - changeable according to NS requirments
  * takes a dns_query and returns domain according to filter spec
  * inputs: dns_query *query - contains the query
  * outputs: domain contains extracted data according to filter
  * */
-static int parse_host_domain(struct dns_query *query, char *domain);
+static int parse_host_domain(struct _dns_query *query, char *domain);
 /* get_ip_addr function: 
  * extracts ip address from packet
  * inputs: xdp_md for data and data_end (packet bounds)
@@ -59,7 +59,7 @@ static uint32_t get_ip_addr(struct xdp_md *ctx);
  * input: xdp_md to get packet content
  * output: bpf_tail_call next XDP program in case of success, XDP_DROP otherwise.
 */
-SEC("xdp-receive-packet")
+SEC("xdp-packet-preprocess")
 int  dns_extract_query(struct xdp_md *ctx)
 {
 	//packet is between data & data_end starting from ethernet
@@ -111,7 +111,7 @@ int  dns_extract_query(struct xdp_md *ctx)
 	}
 
 	/* 6) Validate DNS header size */ 
-	struct dns_hdr *dns_header = (void *)udp_header + udp_header_size;
+	struct _dns_hdr *dns_header = (void *)udp_header + udp_header_size;
 	dns_header_size = sizeof(*dns_header);
 	if((void *)dns_header + dns_header_size > data_end)
 	{
@@ -123,7 +123,7 @@ int  dns_extract_query(struct xdp_md *ctx)
 	{
 		saddr = ip_header->saddr;
 		void *query_start = (void *)dns_header + dns_header_size; 
-		struct dns_query q;
+		struct _dns_query q;
 		int q_length;
 
 		/* 7.1) Extract domain from DNS query */
@@ -135,7 +135,7 @@ int  dns_extract_query(struct xdp_md *ctx)
 			bpf_map_update_elem(&query, &saddr, &q, BPF_ANY);
 			bpf_printk2("domain: %s", q.qname);
 			//call tail function
-			bpf_tail_call(ctx, &jmp_table, XDP_LEGAL_DOMAIN);
+			bpf_tail_call(ctx, &map_xdp_progs, XDP_PROG_VALIDATION);
 		}
 		return XDP_DROP;
 	}
@@ -149,7 +149,7 @@ int  dns_extract_query(struct xdp_md *ctx)
  * returns XDP_DROP and blocks host for 5 secs in case dns isn't legal
  * returns XDP_PASS otherwise
  * */
-SEC("xdp-check-if-legal-domain")
+SEC("xdp-packet-validation")
 int  dns_legal_domain(struct xdp_md *ctx){
 	uint32_t saddr = -1;
         uint32_t to_drop = 0;
@@ -162,7 +162,7 @@ int  dns_legal_domain(struct xdp_md *ctx){
 	}
 
 	/* 2) Get Packets Counters */
-	struct counters *pkts_counters = bpf_map_lookup_elem(&packets_counters,&counters_key);
+	struct _packets_counters *pkts_counters = bpf_map_lookup_elem(&map_packets_counters,&counters_key);
 	if(!pkts_counters)
 	{
 		return XDP_DROP;
@@ -170,23 +170,23 @@ int  dns_legal_domain(struct xdp_md *ctx){
 
 	/* 3) Check if host is being blocked */
 	uint64_t *exists_time = NULL, curr_time=0;
-	if((exists_time = bpf_map_lookup_elem(&hosts_rate, &saddr)))
+	if((exists_time = bpf_map_lookup_elem(&map_blocked_requesters, &saddr)))
 	{
 		curr_time = bpf_ktime_get_ns();
 		if(curr_time - *exists_time < BLOCK_TIME)
 		{
 			pkts_counters->already_blocked = pkts_counters->already_blocked+1;
-			bpf_map_update_elem(&packets_counters, &counters_key, pkts_counters, BPF_ANY);
+			bpf_map_update_elem(&map_packets_counters, &counters_key, pkts_counters, BPF_ANY);
 			return XDP_DROP;	
 		}
 		else
 		{
-			bpf_map_delete_elem(&hosts_rate, &saddr);
+			bpf_map_delete_elem(&map_blocked_requesters, &saddr);
 		}
 	}
 
 	/* 4) Get Dns Query */
-	struct dns_query *q = NULL;
+	struct _dns_query *q = NULL;
        	if(!(q = bpf_map_lookup_elem(&query, &saddr)))
 	{
 		return XDP_DROP;
@@ -201,8 +201,8 @@ int  dns_legal_domain(struct xdp_md *ctx){
 	}
 	/* 4) Validate requested domain */
 	/* 4.2) Validate domain*/
-	uint32_t *is_allowed = NULL;
-	if(!(is_allowed=bpf_map_lookup_elem(&allowed_domains, curr_domain)))
+	uint32_t *is_illegal = NULL;
+	if((is_illegal=bpf_map_lookup_elem(&map_illegal_domains, curr_domain)))
 	{
 		pkts_counters->dropped_packets_name = pkts_counters->dropped_packets_name + 1;
 		to_drop = 1;
@@ -214,20 +214,20 @@ int  dns_legal_domain(struct xdp_md *ctx){
 	}
 	if(to_drop == 1)
 	{
-		bpf_map_update_elem(&packets_counters, &counters_key, pkts_counters, BPF_ANY);
+		bpf_map_update_elem(&map_packets_counters, &counters_key, pkts_counters, BPF_ANY);
 		uint64_t first_query_time = bpf_ktime_get_ns();
-		bpf_map_update_elem(&hosts_rate, &saddr, &first_query_time, BPF_ANY);
+		bpf_map_update_elem(&map_blocked_requesters, &saddr, &first_query_time, BPF_ANY);
 		return XDP_DROP;
 	}
 	/* 5) Packet Validated */
 	pkts_counters->passed_packets = pkts_counters->passed_packets + 1;
-	bpf_map_update_elem(&packets_counters, &counters_key, pkts_counters, BPF_ANY);
+	bpf_map_update_elem(&map_packets_counters, &counters_key, pkts_counters, BPF_ANY);
 
 	return XDP_PASS;
 }
 
 /**************************************** parse_query ******************************************************/
-static int parse_query(struct xdp_md *ctx, void *query_start, struct dns_query *q){
+static int parse_query(struct xdp_md *ctx, void *query_start, struct _dns_query *q){
 	void *data_end = (void *)(long)ctx->data_end;
 	void *cursor = query_start;
 	uint16_t pos = 0, i=0;
@@ -255,7 +255,7 @@ static int parse_query(struct xdp_md *ctx, void *query_start, struct dns_query *
 }
 
 /**************************************** parse_host_domain ******************************************************/
-static int parse_host_domain(struct dns_query *q, char *curr_domain){
+static int parse_host_domain(struct _dns_query *q, char *curr_domain){
 	uint32_t k=0;
 	for(int i=0; i<MAX_QUERY_LENGTH; ++i){
 		if(q->qname[i] == '\x03'){// \0x3 is ETX - end of text

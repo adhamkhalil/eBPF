@@ -1,23 +1,22 @@
 #ifndef _COMMON_H
 #define _COMMON_H
 
-#include <stdint.h> //for uint<size>_t
-
+/* 1) Includes */
+#include <stdint.h>
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/in.h>
 #include <linux/udp.h>
-//#include "../libbpf/src/libbpf.h"
 #include "../libbpf/src/bpf_helpers.h"
 #include "../libbpf/src/bpf_endian.h"
 
-//Defines
+/* 2) Defines */
 #define MAX_QUERY_LENGTH 50
 #define MAX_ALLOWED_QUERY_LENGTH 30
 #define BLOCK_TIME 5000000000 //5 secs
 
-struct dns_query{
+struct _dns_query{
 	uint16_t qtype;
 	uint16_t qclass;
 	uint16_t qlength;
@@ -25,7 +24,7 @@ struct dns_query{
 };
 
 //extracted from internet - known header
-struct dns_hdr{
+struct _dns_hdr{
 	uint16_t id;
 
 	uint8_t rd	:1;//recursion desired
@@ -46,20 +45,21 @@ struct dns_hdr{
 	uint16_t arcount;//number of resource entries
 };
 
-//contains counts for XDP program analyze
-struct counters{
-	uint64_t dropped_packets_name;//dropped by name filter
-	uint64_t dropped_packets_length;//dropped by length filter
+struct _packets_counters{
+	uint64_t dropped_packets_name;
+	uint64_t dropped_packets_length;
 	uint64_t already_blocked;
-	uint64_t passed_packets;	//passed
+	uint64_t passed_packets;	
 };
 
+
+/* 4) Maps */ 
 struct {
 	__uint(type, BPF_MAP_TYPE_PROG_ARRAY);
 	__uint(key_size, sizeof(uint32_t));
 	__uint(value_size, sizeof(uint32_t));
 	__uint(max_entries, 2);
-}jmp_table SEC(".maps");
+}map_xdp_progs SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -67,12 +67,12 @@ struct {
 	__uint(value_size, sizeof(uint32_t));
 	__uint(max_entries, 2);//TODO #define
 	__uint(map_flags, 1);
-}allowed_domains SEC(".maps");
+}map_illegal_domains SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(key_size, sizeof(uint32_t)); //IP address
-	__uint(value_size, sizeof(struct dns_query)); 
+	__uint(value_size, sizeof(struct _dns_query)); 
 	__uint(max_entries, 100);//TODO #define
 	__uint(map_flags, 1);
 }query SEC(".maps");
@@ -80,16 +80,16 @@ struct {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(key_size, sizeof(uint32_t));
-	__uint(value_size, sizeof(struct counters));
+	__uint(value_size, sizeof(struct _packets_counters));
 	__uint(max_entries, 1);
-}packets_counters SEC(".maps");
+}map_packets_counters SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(key_size, sizeof(uint32_t)); //IP addr
 	__uint(value_size, sizeof(uint64_t)); //time in ns
 	__uint(max_entries, 1000);	
-}hosts_rate SEC(".maps");
+}map_blocked_requesters SEC(".maps");
 
 #endif
 

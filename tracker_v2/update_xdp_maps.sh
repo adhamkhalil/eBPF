@@ -4,9 +4,9 @@
 #bpftool map create /sys/fs/bpf/query flags 1 \
 #	name query type hash key 4 value 262 entries 100
 
-#map create  - allowed domains - done in <*_user>.c
-#bpftool map create /sys/fs/bpf/allowed_domains flags 1 \
-#	name allowed_domains type hash key 4 value 8 entries 3
+#map create  - map_illegal domains - done in <*_user>.c
+#bpftool map create /sys/fs/bpf/map_illegal_domains flags 1 \
+#	name map_illegal_domains type hash key 4 value 8 entries 3
 
 #associate the pinned map with the maps in the XDP program - done in <*_user>.c
 #bpftool prog load xdp_extract_query.o /sys/fs/bpf/xdp_extract_query type xdp \
@@ -18,21 +18,21 @@
 
 #add "com" "net" "org" domains to the map
 # com
-bpftool map update pinned /sys/fs/bpf/allowed_domains \
-	key 0x63 0x6f 0x6d 0x00 \
+bpftool map update pinned /sys/fs/bpf/map_illegal_domains \
+	key 0x61 0x61 0x61 0x61 \
 	value 00 00 00 00
 
 # net
-#bpftool map update pinned /sys/fs/bpf/allowed_domains \
-#	key 0x6e 0x65 0x74 0x00 \
-#	value 00 00 00 00
-
-# org
-bpftool map update pinned /sys/fs/bpf/allowed_domains \
-	key 0x6f 0x72 0x67 0x00 \
+bpftool map update pinned /sys/fs/bpf/map_illegal_domains \
+	key 0x62 0x62 0x62 0x62 \
 	value 00 00 00 00
 
-bpftool map update pinned /sys/fs/bpf/packets_counters \
+# org
+#bpftool map update pinned /sys/fs/bpf/map_illegal_domains \
+#	key 0x6f 0x72 0x67 0x00 \
+#	value 00 00 00 00
+
+bpftool map update pinned /sys/fs/bpf/map_packets_counters \
 	key 00 00 00 00 \
 	value 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
